@@ -1,0 +1,46 @@
+# ============================================================
+# Sync CISA KEV — 每日同步官方 KEV Catalog 到本仓库
+# ============================================================
+# 行为：每日 09:00 Asia/Shanghai（01:00 UTC）与手动触发，从 CISA 官方
+#       拉取 known_exploited_vulnerabilities.json；内容有变化才 commit + push，
+#       无变化跳过（不产生空提交、不触发无谓的 CI 循环）。
+# 不变量：仅 schedule + workflow_dispatch 触发；permissions 最小（contents: write
+#         仅用于提交镜像文件）；不引入任何代码/依赖；失败即失败（不吞错）。
+# 注意：本 workflow 在 GitHub-hosted runner 上运行，出口 IP 不受内网代理
+#       （.245:10809，CISA 403 封禁对象）影响，可直连 cisa.gov。
+# ============================================================
+name: Sync CISA KEV
+
+on:
+  schedule:
+    - cron: '0 1 * * *'   # 每日 09:00 Asia/Shanghai
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    name: Fetch CISA KEV catalog
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download official KEV catalog
+        run: |
+          curl -fsSL -o known_exploited_vulnerabilities.json \
+            "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json"
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- known_exploited_vulnerabilities.json; then
+            echo "KEV catalog unchanged; skip commit"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add known_exploited_vulnerabilities.json
+          git commit -m "sync(kev): refresh CISA KEV catalog $(date +%F)"
+          git push
