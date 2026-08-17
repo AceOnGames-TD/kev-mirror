@@ -35,7 +35,9 @@ jobs:
 
       - name: Commit if changed
         run: |
-          if git diff --quiet -- known_exploited_vulnerabilities.json; then
+          # git status --porcelain 同时覆盖 untracked（首次入库）与 modified（后续更新）；
+          # git diff --quiet 对 untracked 文件返回 0，首次同步会误判 unchanged。
+          if ! git status --porcelain -- known_exploited_vulnerabilities.json | grep -q .; then
             echo "KEV catalog unchanged; skip commit"
             exit 0
           fi
